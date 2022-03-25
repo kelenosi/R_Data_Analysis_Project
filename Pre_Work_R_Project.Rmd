@@ -1,5 +1,5 @@
 ---
-title: "EDA_R_PROJECT"
+title: " "
 output: html_document
 ---
 
@@ -14,19 +14,52 @@ library(pROC)
 
 ```
 
-```{r, data}
+```{r, data, include=FALSE}
 df_auto <- read.csv(paste0(getwd(),"/data_prep/car.csv"),
                     stringsAsFactors = TRUE)
-#exposure adjusted glm..source(logit_exposure_adjusted.r)
-#glm(survive ~ date, family=binomial(link=logitexp(exposure=df_auto$exposure)),
-#    data=df_auto)
 ```
+
+### R Data Analysis Project--Vehicle Insurance Claims
+
+The objective of the analysis is to explore some basic descriptive statistics to
+analyze and analyze data before fitting a logistic regression model to predict
+the probability of having a claim. A R Shiny application has been developed 
+to accompany the analysis. The app can be accessed [**here**](https://kelenosi.shinyapps.io/shiny_app/).
+
+The dataset is vehicle insurance claims. The data set is based on one-year vehicle
+insurance policies taken out in 2004 or 2005. There are 67,856 policies of which
+4,624 had a least one claim. 
+
+There are 3 categorical variables:    
+*area: Area of residence       
+*gender: Gender        
+veh_body: Vehicle body type               
+    
+
+There are 7 numeric variables:    
+*agecat: Age band of policy holder    
+*clm: Claim occurrence       
+*claimcst0: Claim size    
+*exposure: Exposure   
+*numclaims: Number of claims        
+*veh_age: Age of vehicle    
+veh_value: Value of vehicle                    
+  
+The structure of the data is shown below:
+
+```{r}
+str(df_auto)
+```
+
+The numeric variables agecat, veh_age, clm, are converted to categorical
+variables and veh_value is binned.
 
 ```{r}
 df_auto <- df_auto[,-11]
 
 df_auto$agecat <- as.factor(df_auto$agecat)
 
+df_auto$veh_age <- as.factor(df_auto$veh_age)
 
 df_auto$clm <- as.factor(df_auto$clm)
 
@@ -35,36 +68,22 @@ df_auto$veh_band <- as.factor(cut(df_auto$veh_value,
 
 levels(df_auto$veh_band) <- c("<=25","25-50","50-75","75-100","100-125",">125")
 
-df_auto %>% 
-  group_by(gender,clm) %>% 
-  summarise(numclaims = sum(numclaims,na.rm = T),
-            claimcst0 = sum(claimcst0,na.rm = T),
-            .groups = "drop")
 ```
 
-
+#### Summary of the data
 ```{r, EDA}
 
 summary(df_auto)
 
 ```
 
+#### Scatter Plots
+The relationship between two continous variables can be explored with a
+scatterplot. The scatterplots below are enhanced by including
+categorical variables.
 ```{r, warning=FALSE}
 
-#plot(restaurants[, -c(1, 6)], col = as.factor(restaurants$Location))
-
-#plot(df_auto[,names(df_auto[sapply(df_auto,class) != "factor"])])
-
-ggplot(df_auto %>% filter(veh_value <= 7,
-                          claimcst0 <= 10000), aes(x=veh_value, y= claimcst0))+
-  geom_point(aes(colour = gender)) +
-  xlab("Vehicle value in $10,000 units") +
-  ylab("Claim Size") +
-  ggtitle("Vehicle Insurance Data Scatterplot") +
-  theme(plot.title = element_text(hjust = .5))
-
-
-lapply(c("veh_body","veh_age", "area","agecat"),function(i){
+lapply(c("veh_body","veh_age", "area","agecat","gender"),function(i){
   ggplot(df_auto %>% filter(veh_value <= 7,
                           claimcst0 <= 10000), aes(x=veh_value, y= claimcst0))+
   geom_point(aes(colour = get(i))) +
@@ -75,9 +94,20 @@ lapply(c("veh_body","veh_age", "area","agecat"),function(i){
   theme(plot.title = element_text(hjust = .5)) +
   guides(color=guide_legend(i))
 })
+```
 
+The relationship between vehicle value and claim size can be clearly shown
+especially when categorical variables are included. This is most pronounced
+when adding vehicle body to the plot.
 
-ggplot(df_auto %>% mutate(log_veh_value = log(veh_value)),
+#### Boxplots
+Boxplots are appropriate for examining the relationship between a continous
+variable and a categorical variable. The first boxplot below looks the 
+occurrence of a claim against the log of vehicle value. The remainder look
+at various categorical variables against the log of claim amount.
+```{r}
+
+ggplot(df_auto %>% filter(veh_value != 0) %>% mutate(log_veh_value = log(veh_value)),
        aes(x=fct_reorder(clm,log_veh_value),y=log_veh_value)) +
   geom_boxplot() +
   xlab("Occurrence of claim") +
@@ -87,7 +117,7 @@ ggplot(df_auto %>% mutate(log_veh_value = log(veh_value)),
 
 
 lapply(c("veh_body","veh_age", "area","agecat","gender","veh_band"),function(i){
-ggplot(df_auto %>% mutate(log_claim = log(claimcst0)),
+ggplot(df_auto %>% filter(claimcst0 != 0) %>%  mutate(log_claim = log(claimcst0)),
        aes(x=fct_reorder(factor(get(i)),log_claim),y=log_claim)) +
   geom_boxplot() +
   xlab(i) +
@@ -97,6 +127,13 @@ ggplot(df_auto %>% mutate(log_claim = log(claimcst0)),
 
 })
 
+```
+
+The levels with higher claim amounts are readily apparent.
+
+#### Histogram
+Histograms are useful for assessing the distribution of a variable.
+```{r, warning=FALSE}
 
 ggplot(df_auto %>% filter(claimcst0 <= 15000) %>% 
          mutate(clm_size = claimcst0/1000), aes(x=clm_size)) +
@@ -107,6 +144,20 @@ ggplot(df_auto %>% filter(claimcst0 <= 15000) %>%
   scale_x_continuous(limits = c(.2, 15)) +
   ylim(0,800)
 
+
+```
+
+The plot above illustrates the skewed distribution of the claim size. The mode
+of the distribution is at 0 which is common for vehicle insurance data as
+most policies do not have claims.
+
+#### Bar plots
+Bar plots are another useful tool to analyze the distribution of a variable.
+The bar plot of claim occurrence is enhanced by including other categorical
+variables to understand the relationship between the levels of a variable and
+claim occurrence.
+```{r, warning=FALSE}
+#bar
 lapply(c("veh_body","veh_age", "area","agecat","gender","veh_band"),function(i){
 ggplot(df_auto, aes(x= clm,  group=get(i))) + 
  geom_bar(aes(y = ..prop.., fill = factor(..x..,labels = c("0","1"))), stat="count") +
@@ -125,10 +176,20 @@ ggplot(df_auto, aes(x= clm,  group=get(i))) +
 
 ```
 
+#### Correlation and Summary data
+A correlation matrix is a good way to view relationship between continous
+variables. To understand the relationships between the levels of a variable
+aggregating the data and creating key performance metrics can be useful.
+For vehicle insurance data it is useful to look at:   
+*claim frequency -- claim occurrence per unit of exposure   
+*claim severity -- claim amount per claim occurrence     
+severity -- claim amount per unit of exposure     
+
 ```{r, summary}
 
+
 cor(df_auto[df_auto$claimcst0 !=0,c("veh_value","exposure","numclaims",
-                                    "claimcst0","veh_age")])
+                                    "claimcst0")])
 
 
 lapply(c("veh_body","veh_age", "area","agecat","gender","veh_band"),function(i){
@@ -157,36 +218,45 @@ for(i in 1:length(var_list)){
                                    ref = base_list[i])
 }
 
-##optimal cutoff
-
-searchgrid <- seq(.01,.99,.01)
-result <- cbind(searchgrid,NA)
-
-cost2 <- function(r,pi){
-  weight1 = 7
-  weight0 = 1
-  c1= (r==1) & (pi < pcut)
-  c0=  (r==0) & (pi > pcut)
-  return(mean(weight1*c1 + weight0*c0))
-}
-
-for(i in 1:length(searchgrid)){
-  pcut <- result[i,1]
-  result[i,2] <- cost2(df_auto$clm, predict(model_step_aic, type = "response"))
-}
-
-plot(result)
-
-searchgrid[which(result[,2] == min(result[,2]))]
 ```
 
+The continuous variables do not appear to have a high correlation. The inverse
+relationship between exposure and claim amount is intuitive. The aggregated data
+shows patterns that are consistent with vehicle insurance data. For example,
+younger drivers agecat 1 have higher frequency, severity and pure premium than
+older drivers.
+
+
+
+#### Fitting and selecting a model
+In this section logistic regression is applied to the vehicle insurance data
+set. The occurrence of a claim is the response variable.The focus of the project
+was not model development but rather to illustrate basic data analysis in the
+context of fitting a model as well as building an R Shiny app to house the
+fitted model in order to make predictions. As a consequence the typical modeling 
+process--separating data into train/test and validation have not been conducted.
+The model is specified with an exposure offset term. Modeling counts requires
+correction for the number exposed to risk. When policies have exposure to risk,
+the probability of a claim is proportionally reduced by the time at risk.
+Stepwise AIC was used to select the final model.
 ```{r}
 source("logit_exposure_adjusted.r")
 
-model_0 = glm(clm ~ agecat + area + gender + veh_age + veh_body + veh_value,
+model_0 <-  glm(clm ~ agecat + area + gender + veh_age + veh_body +
+                veh_band + gender,offset = log(exposure), family=binomial,
+              data=df_auto)
+
+model_null <- glm(clm ~ 1,offset = log(exposure), family=binomial,
+                  data=df_auto)
+
+#exposure adjusted via the link function produces the same result as offset
+#however the predict function does not work as intended when the adjustment is
+#made to the link function.
+
+model_0_adj <-  glm(clm ~ agecat + area + gender + veh_age + veh_body + veh_value,
               family=binomial(link=logitexp(exposure=df_auto$exposure)),
               data=df_auto)
-model_null <- glm(clm ~ 1,
+model_null_adj <- glm(clm ~ 1,
               family=binomial(link=logitexp(exposure=df_auto$exposure)),
               data=df_auto)
 
@@ -195,16 +265,42 @@ model_null <- glm(clm ~ 1,
 model_step_aic <- step(model_null, scope=list(model_null, upper=model_0),
                        k=2,direction = "forward")
 
-model_final <- glm(clm ~ agecat + veh_age + veh_body + area + veh_value,
-                  family=binomial(link=logitexp(exposure=df_auto$exposure)),
-                  data=df_auto)
+model_final <- glm(clm ~ agecat + veh_age + veh_body + area,
+                   offset = log(exposure),family=binomial, data=df_auto)
+
+#save final model----
+
+saveRDS(model_final,"./model_final.rds")
+
 ```
 
+#### Prediction
+
+After the model has been selected it can be used to predict values
+in new data sets or deployed in an app and used as a tool for end
+user to estimate potential outcomes.
+```{r}
+
+names(base_list) <- unlist(var_list)
+
+new_data <- data.frame(dplyr::bind_rows(base_list))
+
+new_data$exposure <- .50
+
+predict(model_final,newdata = new_data,type = "response")
+```
+
+#### ROC curve and confusion matrix
+
+One way of examining the performance of a logistic model is via a classification
+table aka confusion matrix. The fitted probabilities are computed in the test data
+set and each observation is classified as either an event or non-event depending
+on whether the fitted values is greater than a given threshold.
 ```{r, confusion_matrix, warning=FALSE}
 
-source("ROC_function.r")
+source("ROC_function.R")
 
-cutoff=.14
+cutoff=.08
 
 model_0_insample <- predict(model_0,type = "response")
 model_0_insample <- model_0_insample > cutoff
@@ -241,7 +337,33 @@ cbind(name =rownames(df_cm),df_cm) %>%
   column_spec(1:4, width = "6em") %>% 
   column_spec(1,extra_css = 'vertical-align: middle !important;') %>% 
   kable_styling(full_width = F, html_font = "Cambria")
+  
 ```
+
+Sensitivity is the relative frequency of predicting an event when an event does
+take place.
+
+Specificity is the relative frequency of predicting a non-event when there is no
+event.
+
+
+### CONCLUSION
+
+The above analysis demonstrates that exploratory data analysis can be used
+to answer business questions by analyzing the relationships between different 
+variables within a data set. This analysis focused on providing an estimate of 
+the probability that a policyholder has a claim. Alternative questions could 
+have just as easily been explored such as what is the expected frequency of 
+claim occurrence or the expected size of a claim a policyholder will have.
+
+The data analysis and model have been deployed in a [**R Shiny app**](https://kelenosi.shinyapps.io/shiny_app/). 
+The source code for the app and supporting files can be found on[**GitHub**](https://github.com/kelenosi/R_Data_Analysis_Project.git).
+
+
+
+
+
+
 
 
 
